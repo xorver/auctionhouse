@@ -43,67 +43,85 @@ class Auction extends Actor with FSM[AuctionState, Data] {
   
   when(Undefined) {
     case Event(Start(expirationTime), Uninitialized) =>
+      context.system.scheduler.scheduleOnce(Duration.create(expirationTime, TimeUnit.MILLISECONDS), self, Expired)
       goto(Created) using AuctionData(expirationTime, 0, sender, null)
   }
   
   onTransition {
-    case _ -> Created => 
-      scheduleExpiration(stateData)
-    case Created -> Ignored => 
-      scheduleExpiration(stateData)
-    case Activated -> Sold =>
-      scheduleExpiration(stateData)
+    case Ignored -> Created => 
+//      log.info(s"Changing state Ignored -> Created! $stateData")
       stateData match {
-	  	case AuctionData(_, _, seller, buyer) => 
+	  	case AuctionData(expirationTime, _, _, _) => 
+  	      context.system.scheduler.scheduleOnce(Duration.create(expirationTime, TimeUnit.MILLISECONDS), self, Expired)
+	  	case Uninitialized => Unit
+      }
+    case Created -> Ignored => 
+//      log.info(s"Changing state Created -> Ignored! $stateData")
+      stateData match {
+	  	case AuctionData(expirationTime, _, _, _) => 
+  	      context.system.scheduler.scheduleOnce(Duration.create(expirationTime, TimeUnit.MILLISECONDS), self, Expired)
+	  	case Uninitialized => Unit
+      }
+    case Activated -> Sold =>
+//      log.info(s"Changing state Activated -> Sold! $stateData")
+      stateData match {
+	  	case AuctionData(expirationTime, _, seller, buyer) => 
+  	      context.system.scheduler.scheduleOnce(Duration.create(expirationTime, TimeUnit.MILLISECONDS), self, Expired)
 	  	  seller ! AuctionSold
 	  	  buyer ! AuctionWon
+	  	case Uninitialized => Unit
       }
   }
   
   when(Created) {
-    case Event(Bid(value), auctionData @ AuctionData(expirationTime, actualBid, seller, buyer)) if value > actualBid =>
-            log.warning("got valid bid!")
-      goto(Activated) using AuctionData(expirationTime, value, seller, sender)
-    case Event(Bid(value), _) =>
-            log.warning("got invalid bid!")
-      stay
     case Event(Expired, _) =>
       goto(Ignored)
+    case Event(Bid(value), auctionData @ AuctionData(expirationTime, actualBid, seller, buyer)) if value > actualBid =>
+      log.info(s"Bid $value, from ${sender.path.name}!")
+      goto(Activated) using AuctionData(expirationTime, value, seller, sender)
+    case Event(Bid(value), _) =>
+//      log.info("got invalid bid!")
+      stay
   }
   
   when(Activated) {
+    case Event(Expired, _) =>
+      log.info("Auction sold!")
+      goto(Sold)
     case Event(Bid(value), auctionData @ AuctionData(expirationTime, actualBid, seller, buyer)) if value > actualBid => 
+      log.info(s"Bid $value, from ${sender.path.name}!")
       stay using AuctionData(expirationTime, value, seller, sender)
     case Event(Bid(value), _)=>
+//      log.info("got invalid bid in activated state!")
       stay
-    case Event(Expired, _) =>
-      goto(Sold)
   }
   
   when(Ignored) {
     case Event(Relist, _) =>
       goto(Created)
     case Event(Expired, _) =>
-      log.info("auction $self ignored!")
+      log.info("Auction ignored!")
       stop
   }
   
   when(Sold) {
-    case Event(Expired, _) =>
-      log.info(s"auction $self sold!")
+    case Event(Expired, AuctionData(expirationTime, actualBid, seller, buyer)) =>
+      log.info(s"Auction sold to ${buyer.path.name}, price: $actualBid!")
       stop
   }
 
   whenUnhandled {
     case Event(e, s) => {
-      log.warning("received unhandled request {} in state {}/{}", e, stateName, s)
+//      log.warning("received unhandled request {} in state {}/{}", e, stateName, s)
       stay
     }
   }
   
   def scheduleExpiration(auctionData: Data) : Unit = {
     stateData match {
-	  case AuctionData(expirationTime, _, _, _) => context.system.scheduler.scheduleOnce(Duration.create(expirationTime, TimeUnit.MILLISECONDS), self, Expired)
+	  case AuctionData(expirationTime, _, _, _) => 
+	    context.system.scheduler.scheduleOnce(Duration.create(10000, TimeUnit.MILLISECONDS), self, Expired)
+	    context.system.scheduler.scheduleOnce(Duration.create(expirationTime, TimeUnit.MILLISECONDS), self, Expired)
 	  case Uninitialized => Unit
     }
   }

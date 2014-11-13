@@ -37,12 +37,13 @@ case object Uninitialized extends Data
 case class AuctionData(expirationTime: Int, actualBid: Int, seller: ActorRef, buyer: ActorRef) extends Data
 
 
-class Auction extends Actor with FSM[AuctionState, Data] {
-
+class Auction(name: String) extends Actor with FSM[AuctionState, Data] {
+  
   startWith(Undefined, Uninitialized)
   
   when(Undefined) {
     case Event(Start(expirationTime), Uninitialized) =>
+      context.actorSelection("../masterSearch") ! AddAuction(name)
       context.system.scheduler.scheduleOnce(Duration.create(expirationTime, TimeUnit.MILLISECONDS), self, Expired)
       goto(Created) using AuctionData(expirationTime, 0, sender, null)
   }

@@ -7,6 +7,7 @@ import akka.actor.Props
 class MasterSearch extends Actor  {
 
   val SERACHERS_NUM=4
+  
   val auctionSearchList = (1 to SERACHERS_NUM).map(num => context.actorOf(Props[AuctionSearch], "auctionSearch"+num)).toList
   val routees = Vector.fill(SERACHERS_NUM) {
 	 val r = context.actorOf(Props[AuctionSearch])
@@ -23,6 +24,5 @@ class MasterSearch extends Actor  {
 		  case find : AddAuction =>
 			routerBroadcast.route(message, sender)
 		}
-		  
 	}
 }

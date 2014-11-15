@@ -3,12 +3,9 @@ package auctionhouse
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.actor.Props
-import auctionhouse.actors.Auction
 import auctionhouse.actors.Buyer
-import auctionhouse.actors.StartWorking
 import auctionhouse.actors.WakeUp
 import auctionhouse.actors.Seller
-import auctionhouse.actors.AuctionSearch
 import auctionhouse.actors.MasterSearch
 
 object Auctionhouse {
